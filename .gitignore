@@ -4,3 +4,5 @@ CMakeFiles
 CMakeCache.txt
 pvm
 *.a
+*.DS_Store
+.*
