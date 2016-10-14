@@ -2,25 +2,17 @@
 #include <string>
 
 #include "bytecode/parser.h"
+#include "bytecode/class_file.h"
 
 int main() {
-  std::cout << "Hello" << std::endl;
-
-  char data[] = "HEJ";
-  char data2[] = "KAT\1";
   bytecode::parser p;
-  p.parse(data, 3);
-  p.parse(data2, 5);
-  p.parse(data, 3);
-  p.parse(data, 3);
-  p.parse(data, 3);
-  p.parse(data, 3);
-  p.parse(data, 3);
-  p.parse(data, 3);
 
-  std::cout << "Instructions:" << std::endl;
-
-  for (const auto &instruction : p.consume_instructions()) {
-    std::cout << std::string(instruction) << std::endl;
+  char buffer[1024];
+  auto inbuf = std::cin.rdbuf();
+  while (auto sz = inbuf->sgetn(buffer, 1024)) {
+    p.parse(buffer, sz);
   }
+
+  auto object = p.release();
+  std::cout << object->str() << std::endl;
 }
