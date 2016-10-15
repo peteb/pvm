@@ -7,12 +7,13 @@
 #include "class_file.h"
 #include "utils.h"
 
-using bytecode::instruction;
+
 using bytecode::class_file;
 using bytecode::f2h;
 
 bytecode::parser::parser() {
-  state = &parser::parse_header;
+  object = std::make_shared<class_file>();
+  push_state(new header_state);
 }
 
 void bytecode::parser::parse(const char *data, size_t size) {
@@ -26,16 +27,18 @@ bool bytecode::parser::try_parse() {
   }
 
   const ptrdiff_t start = cursor;
-  if (!state(this)) {
+  if (!state.top()->parse(*this)) {
     // rewind
+    std::cout << "rewind" << std::endl;
     cursor = start;
     return false;
   }
 
+  destruct.clear();
   return true;
 }
 
-bool bytecode::parser::parse_header() {
+/*bool bytecode::parser::parse_header() {
   if (auto *hdr = read<header_t>()) {
     uint32_t magic = f2h(hdr->magic);
 
@@ -57,102 +60,216 @@ bool bytecode::parser::parse_header() {
   else {
     return false;
   }
-}
+  }*/
 
-bool bytecode::parser::parse_cp() {
-  if (auto *num_cp_items_f = read<uint16_t>()) {
-    uint16_t num_cp_items = f2h(*num_cp_items_f);
-    object->constant_pool.clear();
-    object->constant_pool.reserve(num_cp_items);
-    cp_items_left = num_cp_items - 1;
-    state = &parser::parse_cp_item;
-
-    return true;
-  }
-  else {
+bool bytecode::parser::header_state::parse(bytecode::parser &in) {
+  header_t *hdr = in.read<header_t>();
+  if (!hdr) {
     return false;
   }
-}
 
-bool bytecode::parser::parse_cp_item() {
-  if (cp_items_left == 0) {
-    state = &parser::parse_midriff;
-    return true;
+  uint32_t magic = f2h(hdr->magic);
+  if (magic != 0xCAFEBABE) {
+    throw std::runtime_error("Invalid header magic");
   }
 
-  if (auto *info = peek<cp_info_t>()) {
-    std::size_t size;
+  in.object->magic = magic;
+  in.object->minor_version = f2h(hdr->minor_version);
+  in.object->major_version = f2h(hdr->major_version);
+  std::cout << "minor version: " << in.object->minor_version << " major version: " << in.object->major_version << std::endl;
 
-    // Don't manipulate the buffer before the read further down
-    switch (info->tag) {
-    case cp_tag::UTF8: {
-      auto *utf8_info = peek<cp_utf8_info_t>();
-      size = sizeof(cp_utf8_info_t::tag)
-        + sizeof(cp_utf8_info_t::length)
-        + f2h(utf8_info->length);
-      break;
-    }
+  in.replace_state(new constant_pool_state);
+  return true;
+}
 
-    case cp_tag::INTEGER:       size = sizeof(cp_integer_info_t); break;
-    case cp_tag::STRING:        size = sizeof(cp_string_info_t); break;
-    case cp_tag::METHODREF:     size = sizeof(cp_methodref_info_t); break;
-    case cp_tag::FIELDREF:      size = sizeof(cp_fieldref_info_t); break;
-    case cp_tag::CLASS:         size = sizeof(cp_class_info_t); break;
-    case cp_tag::NAME_AND_TYPE: size = sizeof(cp_name_and_type_info_t); break;
-
-    default:
-      std::cerr << "invalid cp_tag: " << +(uint8_t)info->tag << " at cursor " << cursor << std::endl;
+bool bytecode::parser::constant_pool_state::parse(bytecode::parser &in) {
+  if (!parsed_header) {
+    uint16_t *num_items_f = in.read<uint16_t>();
+    if (!num_items_f) {
       return false;
     }
 
-    if (auto *info = read<cp_info_t>(size)) {
-      // Fixup endian
-      if (info->tag == cp_tag::UTF8) {
-        auto utf8_info = reinterpret_cast<cp_utf8_info_t *>(info);
-        utf8_info->length = f2h(utf8_info->length);
-      }
-
-      object->constant_pool.push_back(info);
-      --cp_items_left;
-
-      return true;
-    }
+    items_left = f2h(*num_items_f) - 1;
+    std::cout << "items: " << items_left << std::endl;
+    in.object->constant_pool.clear();
+    in.object->constant_pool.reserve(items_left);
+    parsed_header = true;
   }
 
-  return false;
-}
-
-bool bytecode::parser::parse_midriff() {
-  if (uint16_t *values = read<uint16_t>(sizeof(uint16_t) * 3)) {
-    object->access_flags = f2h(values[0]);
-    object->this_class = f2h(values[1]);
-    object->super_class = f2h(values[2]);
-    state = &parser::parse_if;
-    return true;
+  if (items_left--) {
+    // It's a bit wasteful to allocate a new state for every item,
+    // but it simplifies the code.
+    in.push_state(new constant_pool_item_state);
   }
   else {
+    // We're done
+    in.replace_state(new midriff_state);
+  }
+
+  return true;
+}
+
+bool bytecode::parser::constant_pool_item_state::parse(bytecode::parser &in) {
+  auto *info = in.peek<cp_info_t>();
+  if (!info) {
     return false;
   }
-}
 
-bool bytecode::parser::parse_if() {
-  if (uint16_t *num_if_items_f = read<uint16_t>()) {
-    uint16_t num_if_items = f2h(*num_if_items_f);
+  std::size_t size;
 
-    if (uint16_t *interfaces = read<uint16_t>(sizeof(uint16_t) * num_if_items)) {
-      for (uint16_t *item = interfaces; item != interfaces + num_if_items; ++item) {
-        *item = f2h(*item);
-      }
-
-      object->num_interfaces = num_if_items;
-      object->interfaces = interfaces;
-      state = &parser::parse_fields;
-      return true;
-    }
+  // Don't manipulate the buffer before the read further down
+  switch (info->tag) {
+  case cp_tag::UTF8: {
+    auto *utf8_info = in.peek<cp_utf8_info_t>();
+    size = sizeof(cp_utf8_info_t) + f2h(utf8_info->length);
+    break;
   }
 
-  return false;
+  case cp_tag::INTEGER:       size = sizeof(cp_integer_info_t); break;
+  case cp_tag::STRING:        size = sizeof(cp_string_info_t); break;
+  case cp_tag::METHODREF:     size = sizeof(cp_methodref_info_t); break;
+  case cp_tag::FIELDREF:      size = sizeof(cp_fieldref_info_t); break;
+  case cp_tag::CLASS:         size = sizeof(cp_class_info_t); break;
+  case cp_tag::NAME_AND_TYPE: size = sizeof(cp_name_and_type_info_t); break;
+
+  default:
+    std::cerr << "invalid cp_tag: " << +(uint8_t)info->tag << std::endl;
+    return false;
+  }
+
+  // Let's actually read the data; we know the size.
+  info = in.read<cp_info_t>(size);
+  if (!info) {
+    return false;
+  }
+
+  // Fixup endian
+  if (info->tag == cp_tag::UTF8) {
+    auto utf8_info = reinterpret_cast<cp_utf8_info_t *>(info);
+    utf8_info->length = f2h(utf8_info->length);
+  }
+
+  in.object->constant_pool.push_back(info);
+  in.pop_state();
+
+  return true;
 }
+
+bool bytecode::parser::midriff_state::parse(bytecode::parser &in) {
+  auto *values = in.read<uint16_t>(sizeof(uint16_t) * 3);
+  if (!values) {
+    return false;
+  }
+
+  in.object->access_flags = f2h(values[0]);
+  in.object->this_class = f2h(values[1]);
+  in.object->super_class = f2h(values[2]);
+  in.replace_state(new interfaces_state);
+
+  return true;
+}
+
+bool bytecode::parser::interfaces_state::parse(bytecode::parser &in) {
+  auto *num_items_f = in.read<uint16_t>();
+  if (!num_items_f) {
+    return false;
+  }
+
+  uint16_t num_items = f2h(*num_items_f);
+  auto *items_f = in.read<uint16_t>(sizeof(uint16_t) * num_items);
+  if (!items_f) {
+    return false;
+  }
+
+  for (int i = 0; i < num_items; ++i) {
+    items_f[i] = f2h(items_f[i]);
+  }
+
+  in.object->num_interfaces = num_items;
+  in.object->interfaces = items_f;
+  in.replace_state(new fields_state(&in.object->fields));
+
+  return true;
+}
+
+bool bytecode::parser::fields_state::parse(bytecode::parser &in) {
+  if (!parsed_header) {
+    uint16_t *num_items_f = in.read<uint16_t>();
+    if (!num_items_f) {
+      return false;
+    }
+
+    items_left = f2h(*num_items_f);
+    std::cout << "fields: " << items_left << std::endl;
+    receiver->clear();
+    receiver->reserve(items_left);
+    parsed_header = true;
+  }
+
+  if (items_left--) {
+    // It's a bit wasteful to allocate a new state for every item,
+    // but it simplifies the code.
+    in.push_state(new field_item_state(receiver));
+  }
+  else {
+    // We're done
+    //in.replace_state(new methods_state);
+    std::cout << "Read fields" << std::endl;
+  }
+
+  return true;
+}
+
+bool bytecode::parser::field_item_state::parse(bytecode::parser &in) {
+  if (!parsed_header) {
+    auto *info_f = in.read<field_info_t>();
+    if (!info_f) {
+      return false;
+    }
+
+    current_field.access_flags = f2h(info_f->access_flags);
+    current_field.name_idx = f2h(info_f->name_idx);
+    current_field.descriptor_idx = f2h(info_f->descriptor_idx);
+    attributes_left = f2h(info_f->attributes_count);
+  }
+
+  // TODO: can be simplified by pulling out the "parsed_header" into something
+  //       like a callback for when a state bubbled up
+
+  if (attributes_left--) {
+    in.push_state(new attribute_items_state(attributes_left, &current_field.attributes));
+  }
+  else {
+    receiver->push_back(current_field);
+    in.pop_state();
+  }
+
+  return true;
+}
+
+bool bytecode::parser::attribute_items_state::parse(bytecode::parser &in) {
+  auto *info_f = in.peek<attribute_info_t>();
+  if (!info_f) {
+    return false;
+  }
+
+  uint32_t length = f2h(info_f->length);
+
+  info_f = in.read<attribute_info_t>(sizeof(attribute_info_t) + length);
+  if (!info_f) {
+    return false;
+  }
+
+  info_f->length = length;
+  info_f->name_idx = f2h(info_f->name_idx);
+  receiver->push_back(info_f);
+  in.pop_state();
+
+  return true;
+}
+
+/*
+
 
 bool bytecode::parser::parse_fields() {
   if (uint16_t *num_fields_f = read<uint16_t>()) {
@@ -165,18 +282,29 @@ bool bytecode::parser::parse_fields() {
 }
 
 bool bytecode::parser::parse_field_item() {
-  if (field_items_left == 0) {
+  if (field_items_left == method_items_left == 0) {
+    state = &parser::parse_attributes;
+    return true;
+  }
+  else if (field_items_left == 0) {
     state = &parser::parse_methods;
     return true;
   }
 
-  if (auto *info_f = read<field_info_t>()) {
-    uint16_t num_attributes = f2h(info_f->attributes_count);
+  auto *info_f = read<field_info_t>();
+  if (!info_f) {
+    return false;
+  }
 
-    field_info field;
-    field.access_flags = f2h(info_f->access_flags);
-    field.name_idx = f2h(info_f->name_idx);
-    field.descriptor_idx = f2h(info_f->descriptor_idx);
+  uint16_t num_attributes = f2h(info_f->attributes_count);
+  constructing_field_info.access_flags = f2h(info_f->access_flags);
+  constructing_field_info.name_idx = f2h(info_f->name_idx);
+  constructing_field_info.descriptor_idx = f2h(info_f->descriptor_idx);
+  constructing_field_info.attributes.clear();
+  constructing_field_info.attributes.reserve(num_attributes);
+  attribute_items_left = num_attributes;
+
+  state = &parser::parse_attribute_items;
 
     for (int i = 0; i < num_attributes; ++i) {
       if (auto *attribute = read<attribute_info_t>()) {
@@ -220,53 +348,6 @@ bool bytecode::parser::parse_methods() {
   return false;
 }
 
-bool bytecode::parser::parse_method_items() {
-  if (method_items_left == 0) {
-    state = &parser::parse_attributes;
-    return true;
-  }
-
-  // This code is exactly like field_info, can we refactor a bit please
-  if (auto *method_f = read<method_info_t>()) {
-    uint16_t num_attributes = f2h(method_f->attributes_count);
-
-    method_info method;
-    method.access_flags = f2h(method_f->access_flags);
-    method.name_idx = f2h(method_f->name_idx);
-    method.descriptor_idx = f2h(method_f->descriptor_idx);
-
-    for (int i = 0; i < num_attributes; ++i) {
-      if (auto *attribute = read<attribute_info_t>()) {
-        uint32_t attribute_length = f2h(attribute->length);
-
-        if (read<char>(attribute_length)) {
-          method.attributes.push_back(attribute);
-        }
-        else {
-          return false;
-        }
-      }
-      else {
-        // This is quite wasteful but I wanted to keep the state handling simple
-        return false;
-      }
-    }
-
-    // At this point we've managed to read all the attributes and their data
-    for (auto *attribute : method.attributes) {
-      attribute->name_idx = f2h(attribute->name_idx);
-      attribute->length = f2h(attribute->length);
-    }
-
-    --method_items_left;
-    object->methods.push_back(method);
-
-    return true;
-  }
-
-  return false;
-}
-
 bool bytecode::parser::parse_attributes() {
   if (uint16_t *num_attributes_f = read<uint16_t>()) {
     attribute_items_left = f2h(*num_attributes_f);
@@ -279,6 +360,15 @@ bool bytecode::parser::parse_attributes() {
 
 bool bytecode::parser::parse_attribute_items() {
   if (attribute_items_left == 0) {
+    if (fields_items_left == method_items_left == 0) {
+      // These were for the class
+    }
+    else if (fields_items_left == 0) {
+      state = &parser::parse_field_item;
+      return true;
+    }
+    else if (method_items_left == 0) {
+      state = &parser::parse
     return true;
   }
 
@@ -299,7 +389,7 @@ bool bytecode::parser::parse_attribute_items() {
 
   return true;
 }
-
+*/
 std::shared_ptr<bytecode::class_file> bytecode::parser::release() {
   auto obj = object;
   obj->buffer = std::move(buffer);
@@ -328,4 +418,22 @@ void bytecode::parser::dump_buffer() {
   }
 
   std::cout.flags(format);
+}
+
+void bytecode::parser::replace_state(parser_state *new_state) {
+  pop_state();
+  push_state(new_state);
+}
+
+void bytecode::parser::push_state(parser_state *new_state) {
+  state.push(std::unique_ptr<parser_state>(new_state));
+}
+
+void bytecode::parser::pop_state() {
+  if (state.empty()) {
+    throw std::runtime_error("State stack is empty, can't pop");
+  }
+
+  destruct.emplace_back(std::move(state.top()));
+  state.pop();
 }
