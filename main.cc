@@ -10,9 +10,9 @@ int main() {
   char buffer[1024];
   auto inbuf = std::cin.rdbuf();
   while (auto sz = inbuf->sgetn(buffer, 1024)) {
-    p.parse(buffer, sz);
+    p.write(buffer, sz);
   }
 
-  auto object = p.release();
+  auto object = p.parse();
   std::cout << object->str() << std::endl;
 }
