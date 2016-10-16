@@ -7,7 +7,6 @@
 #include "class_file.h"
 #include "utils.h"
 
-
 using bytecode::class_file;
 using bytecode::f2h;
 
@@ -30,6 +29,10 @@ std::shared_ptr<class_file> bytecode::parser::parse() {
   fields();
   methods();
   attributes();
+
+  if (cursor != buffer.size()) {
+    throw std::runtime_error("failed to consume all input");
+  }
 
   auto object_tmp = object;
   object_tmp->buffer = std::move(buffer);
@@ -71,12 +74,39 @@ bytecode::cp_info_t *bytecode::parser::constant_pool_item() {
     return reinterpret_cast<cp_info_t *>(utf8_info);
   }
 
+  case cp_tag::CLASS: {
+    auto *class_info = read<cp_class_info_t>();
+    class_info->name_idx = f2h(class_info->name_idx);
+    return reinterpret_cast<cp_info_t *>(class_info);
+  }
+
   case cp_tag::INTEGER:       size = sizeof(cp_integer_info_t); break;
-  case cp_tag::STRING:        size = sizeof(cp_string_info_t); break;
-  case cp_tag::METHODREF:     size = sizeof(cp_methodref_info_t); break;
-  case cp_tag::FIELDREF:      size = sizeof(cp_fieldref_info_t); break;
-  case cp_tag::CLASS:         size = sizeof(cp_class_info_t); break;
-  case cp_tag::NAME_AND_TYPE: size = sizeof(cp_name_and_type_info_t); break;
+  case cp_tag::STRING: {
+    auto *string_info = read<cp_string_info_t>();
+    string_info->string_idx = f2h(string_info->string_idx);
+    return reinterpret_cast<cp_info_t *>(string_info);
+  }
+
+  case cp_tag::METHODREF: {
+    auto *methodref_info = read<cp_methodref_info_t>();
+    methodref_info->class_idx = f2h(methodref_info->class_idx);
+    methodref_info->name_and_type_idx = f2h(methodref_info->name_and_type_idx);
+    return reinterpret_cast<cp_info_t *>(methodref_info);
+  }
+
+  case cp_tag::FIELDREF: {
+    auto *fieldref = read<cp_fieldref_info_t>();
+    fieldref->class_idx = f2h(fieldref->class_idx);
+    fieldref->name_and_type_idx = f2h(fieldref->name_and_type_idx);
+    return reinterpret_cast<cp_info_t *>(fieldref);
+  }
+
+  case cp_tag::NAME_AND_TYPE: {
+    auto *name_and_type_info = read<cp_name_and_type_info_t>();
+    name_and_type_info->name_idx = f2h(name_and_type_info->name_idx);
+    name_and_type_info->descriptor_idx = f2h(name_and_type_info->descriptor_idx);
+    return reinterpret_cast<cp_info_t *>(name_and_type_info);
+  }
 
   default:
     throw std::runtime_error("invalid cp_tag");

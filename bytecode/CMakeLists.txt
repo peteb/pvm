@@ -1,3 +1,3 @@
 # -*- cmake -*-
 
-add_library(bytecode parser.cc)
+add_library(bytecode parser.cc class_file.cc)

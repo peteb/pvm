@@ -7,10 +7,16 @@
 #include <vector>
 #include <sstream>
 #include <string>
+#include <stdexcept>
 
 #include "file_format.h"
 
 namespace bytecode {
+  template<typename T> struct cp_info_traits {};
+  template<> struct cp_info_traits<cp_class_info_t> {cp_tag tag = cp_tag::CLASS; };
+  template<> struct cp_info_traits<cp_utf8_info_t> {cp_tag tag = cp_tag::UTF8; };
+  template<> struct cp_info_traits<cp_name_and_type_info_t> {cp_tag tag = cp_tag::NAME_AND_TYPE; };
+
   class field {
   public:
     uint16_t access_flags;
@@ -24,14 +30,25 @@ namespace bytecode {
 
   class class_file {
   public:
-    std::string str() const {
-      std::stringstream ss;
-      ss << "constant_pool: " << constant_pool.size() << "\n";
-      ss << "fields: " << fields.size() << "\n";
-      ss << "methods: " << methods.size() << "\n";
-      ss << "attributes: " << attributes.size() << "\n";
-      ss << "interfaces: " << num_interfaces << "\n";
-      return ss.str();
+    std::string str() const;
+
+  private:
+    std::string describe(cp_info_t *info) const;
+    std::string describe_class(uint16_t idx) const;
+    std::string describe_name_and_type(uint16_t idx) const;
+    std::string describe_utf8(uint16_t idx) const;
+    std::string describe_attributes(const std::vector<attribute_info_t *> attributes, int indent = 0) const;
+
+    friend class parser;
+
+    template<typename T>
+    const T *constant(uint16_t idx) const {
+      auto cp_entry = constant_pool.at(idx - 1);
+      if (cp_entry->tag != cp_info_traits<T>().tag) {
+        throw std::runtime_error("invalid tag for given type");
+      }
+
+      return reinterpret_cast<const T *>(cp_entry);
     }
 
     uint32_t magic;
@@ -48,9 +65,6 @@ namespace bytecode {
 
     uint16_t num_interfaces;
     uint16_t *interfaces;
-
-  private:
-    friend class parser;
 
     std::vector<char> buffer;
   };

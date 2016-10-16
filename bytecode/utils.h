@@ -8,11 +8,11 @@
 #include <arpa/inet.h>
 
 namespace bytecode {
-  uint32_t f2h(uint32_t v) {
+  inline uint32_t f2h(uint32_t v) {
     return ntohl(v);
   }
 
-  uint16_t f2h(uint16_t v) {
+  inline uint16_t f2h(uint16_t v) {
     return ntohs(v);
   }
 }

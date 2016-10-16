@@ -29,6 +29,22 @@ namespace bytecode {
     INVOKE_DYNAMIC       = 18
   };
 
+  enum cp_access_flags {
+    PUBLIC     = 0x0001,
+    PRIVATE    = 0x0002,
+    PROTECTED  = 0x0004,
+    STATIC     = 0x0008,
+    FINAL      = 0x0010,
+    SUPER      = 0x0020,
+    VOLATILE   = 0x0040,
+    TRANSIENT  = 0x0080,
+    INTERFACE  = 0x0200,
+    ABSTRACT   = 0x0400,
+    SYNTHETIC  = 0x1000,
+    ANNOTATION = 0x2000,
+    ENUM       = 0x4000
+  };
+
   struct cp_info_t {
     cp_tag tag;
   } packed;
@@ -93,7 +109,9 @@ namespace bytecode {
 
   using method_info_t = field_info_t;
 
-
+  struct attribute_source_file_t : public attribute_info_t {
+    uint16_t sourcefile_idx;
+  } packed;
 }
 
 #endif // !_BYTECODE_FILE_FORMAT

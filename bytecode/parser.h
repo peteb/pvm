@@ -44,12 +44,13 @@ namespace bytecode {
 
     void header();
     void constant_pool();
-    bytecode::cp_info_t *constant_pool_item();
     void interfaces();
     void fields();
     void methods();
-    bytecode::field field();
     void attributes();
+
+    bytecode::cp_info_t *constant_pool_item();
+    bytecode::field field();
     bytecode::attribute_info_t *attribute();
 
     std::vector<char> buffer;
