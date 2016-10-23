@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <functional>
 #include <cassert>
+#include <iostream>
 
 #include "field.h"
 #include "utils.h"

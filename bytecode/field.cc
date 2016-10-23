@@ -3,7 +3,7 @@
 
 const bytecode::attribute_info_t *bytecode::field::find_attribute(const char *name) const {
   for (const auto *attribute : attributes) {
-    if (class_data->utf8_constant(attribute->name_idx) == name) {
+    if (class_info->utf8_constant(attribute->name_idx) == name) {
       return attribute;
     }
   }
@@ -12,6 +12,10 @@ const bytecode::attribute_info_t *bytecode::field::find_attribute(const char *na
 }
 
 bytecode::field::field(class_file *cf)
-  : class_data(cf)
+  : class_info(cf)
 {
+}
+
+std::string bytecode::field::name() const {
+  return class_info->utf8_constant(name_idx);
 }

@@ -7,20 +7,14 @@
 #include "bytecode/method.h"
 
 #include "runtime/context.h"
+#include "runtime/pclass.h"
+#include "runtime/class_loader.h"
+#include "runtime/pmethod.h"
 
 int main() {
-  bytecode::parser p;
+  runtime::class_loader cl;
+  runtime::pclass *klass = cl.resolve("HelloWorld");
 
-  char buffer[1024];
-  auto inbuf = std::cin.rdbuf();
-  while (auto sz = inbuf->sgetn(buffer, 1024)) {
-    p.write(buffer, sz);
-  }
-
-  auto class_data = p.parse();
-  auto *method = class_data->find_method("main", "([Ljava/lang/String;)V");
-  assert(method && "couldn't find main method");
-
-  runtime::context context(class_data.get());
-  context.execute(method);
+  auto main = klass->fetch_method("main", "([Ljava/lang/String;)V");
+  main.as<runtime::pmethod>()->execute(runtime::pvalue::ref(nullptr), {});
 }

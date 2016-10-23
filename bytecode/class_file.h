@@ -17,6 +17,8 @@ namespace bytecode {
   template<> struct cp_info_traits<cp_utf8_info_t> {cp_tag tag = cp_tag::UTF8; };
   template<> struct cp_info_traits<cp_name_and_type_info_t> {cp_tag tag = cp_tag::NAME_AND_TYPE; };
   template<> struct cp_info_traits<cp_fieldref_info_t> {cp_tag tag = cp_tag::FIELDREF; };
+  template<> struct cp_info_traits<cp_string_info_t> {cp_tag tag = cp_tag::STRING; };
+  template<> struct cp_info_traits<cp_methodref_info_t> {cp_tag tag = cp_tag::METHODREF; };
 
   class method;
   class field;
@@ -24,7 +26,7 @@ namespace bytecode {
   /**
    * Owns the class data.
    * Fields in sub-structures have been converted to host endian except
-   * for unkown fields in attributes.
+   * for unknown fields in attributes.
    */
   class class_file {
   public:
@@ -44,6 +46,13 @@ namespace bytecode {
       return reinterpret_cast<const T *>(cp_entry);
     }
 
+    bytecode::cp_tag constant_tag(uint16_t idx) const {
+      return constant_pool.at(idx - 1)->tag;
+    }
+
+    uint16_t this_class;
+    uint16_t super_class;
+
   protected:
     friend class parser;
     friend class field;
@@ -53,8 +62,6 @@ namespace bytecode {
     uint16_t minor_version;
     uint16_t major_version;
     uint16_t access_flags;
-    uint16_t this_class;
-    uint16_t super_class;
 
     std::vector<cp_info_t *> constant_pool;
     std::vector<field> fields;

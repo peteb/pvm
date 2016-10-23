@@ -8,11 +8,21 @@
 #include "bytecode/method.h"
 #include "pvalue.h"
 
+namespace bytecode {
+  class class_file;
+}
+
 namespace runtime {
+  class pclass;
+
   class context {
   public:
-    context(bytecode::class_file *klass)
+    context(runtime::pclass *klass,
+            runtime::pvalue self,
+            std::vector<runtime::pvalue> args)
       : klass(klass)
+      , self(self)
+      , args(args)
     {
     }
 
@@ -24,9 +34,10 @@ namespace runtime {
     OP(returnn);
 
   private:
-    bytecode::class_file *klass;
-
+    runtime::pclass *klass;
+    runtime::pvalue self;
     std::stack<pvalue> s;
+    std::vector<pvalue> args;
   };
 
 

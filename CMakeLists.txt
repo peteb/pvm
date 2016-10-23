@@ -9,4 +9,4 @@ add_subdirectory(bytecode)
 add_subdirectory(runtime)
 
 add_executable(pvm main.cc)
-target_link_libraries(pvm bytecode runtime)
+target_link_libraries(pvm runtime)

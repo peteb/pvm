@@ -38,6 +38,7 @@ namespace bytecode {
     SUPER      = 0x0020,
     VOLATILE   = 0x0040,
     TRANSIENT  = 0x0080,
+    NATIVE     = 0x0100,
     INTERFACE  = 0x0200,
     ABSTRACT   = 0x0400,
     SYNTHETIC  = 0x1000,

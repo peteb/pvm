@@ -17,8 +17,8 @@ namespace bytecode {
     std::string describe_name_and_type(uint16_t idx) const;
     std::string describe_attributes(const std::vector<attribute_info_t *> attributes, int indent = 0) const;
 
-    static class_file_str *from(class_file *klass) {
-      return static_cast<class_file_str *>(klass);
+    static const class_file_str *from(const class_file *klass) {
+      return static_cast<const class_file_str *>(klass);
     }
 
   private:

@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 
 #include "file_format.h"
 
@@ -22,9 +23,10 @@ namespace bytecode {
     std::vector<attribute_info_t *> attributes;
 
     const attribute_info_t *find_attribute(const char *name) const;
+    std::string name() const;
 
   protected:
-    class_file *class_data;
+    class_file *class_info;
   };
 
 }
