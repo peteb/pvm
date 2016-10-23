@@ -16,30 +16,23 @@ namespace bytecode {
   template<> struct cp_info_traits<cp_class_info_t> {cp_tag tag = cp_tag::CLASS; };
   template<> struct cp_info_traits<cp_utf8_info_t> {cp_tag tag = cp_tag::UTF8; };
   template<> struct cp_info_traits<cp_name_and_type_info_t> {cp_tag tag = cp_tag::NAME_AND_TYPE; };
+  template<> struct cp_info_traits<cp_fieldref_info_t> {cp_tag tag = cp_tag::FIELDREF; };
 
-  class field {
-  public:
-    uint16_t access_flags;
-    uint16_t name_idx;
-    uint16_t descriptor_idx;
+  class method;
+  class field;
 
-    std::vector<attribute_info_t *> attributes;
-  };
-
-  using method = field;
-
+  /**
+   * Owns the class data.
+   * Fields in sub-structures have been converted to host endian except
+   * for unkown fields in attributes.
+   */
   class class_file {
   public:
-    std::string str() const;
+    std::string describe() const;
 
-  private:
-    std::string describe(cp_info_t *info) const;
-    std::string describe_class(uint16_t idx) const;
-    std::string describe_name_and_type(uint16_t idx) const;
-    std::string describe_utf8(uint16_t idx) const;
-    std::string describe_attributes(const std::vector<attribute_info_t *> attributes, int indent = 0) const;
+    const method *find_method(const char *name, const char *descriptor) const;
 
-    friend class parser;
+    std::string utf8_constant(uint16_t idx) const;
 
     template<typename T>
     const T *constant(uint16_t idx) const {
@@ -50,6 +43,11 @@ namespace bytecode {
 
       return reinterpret_cast<const T *>(cp_entry);
     }
+
+  protected:
+    friend class parser;
+    friend class field;
+    friend class method;
 
     uint32_t magic;
     uint16_t minor_version;

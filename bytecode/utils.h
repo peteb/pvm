@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <type_traits>
 #include <arpa/inet.h>
+#include <sstream>
 
 namespace bytecode {
   inline uint32_t f2h(uint32_t v) {
@@ -14,6 +15,13 @@ namespace bytecode {
 
   inline uint16_t f2h(uint16_t v) {
     return ntohs(v);
+  }
+
+  template<typename T>
+  static std::string lexical_cast(const T &val) {
+    std::stringstream ss;
+    ss << val;
+    return ss.str();
   }
 }
 

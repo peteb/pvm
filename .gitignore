@@ -6,3 +6,5 @@ pvm
 *.a
 *.DS_Store
 .*
+core
+*#*#

@@ -76,8 +76,7 @@ namespace bytecode {
     uint16_t name_and_type_idx;
   } packed;
 
-  struct cp_fieldref_info_t {
-    cp_tag tag;
+  struct cp_fieldref_info_t : public cp_info_t {
     uint16_t class_idx;
     uint16_t name_and_type_idx;
   } packed;

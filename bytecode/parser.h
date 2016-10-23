@@ -51,6 +51,7 @@ namespace bytecode {
 
     bytecode::cp_info_t *constant_pool_item();
     bytecode::field field();
+    bytecode::method method();
     bytecode::attribute_info_t *attribute();
 
     std::vector<char> buffer;

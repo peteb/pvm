@@ -6,6 +6,8 @@
 
 #include "class_file.h"
 #include "utils.h"
+#include "field.h"
+#include "method.h"
 
 using bytecode::class_file;
 using bytecode::f2h;
@@ -140,7 +142,7 @@ void bytecode::parser::fields() {
 bytecode::field bytecode::parser::field() {
   auto *info = read<field_info_t>();
 
-  bytecode::field new_field;
+  bytecode::field new_field(object.get());
   new_field.access_flags = f2h(info->access_flags);
   new_field.name_idx = f2h(info->name_idx);
   new_field.descriptor_idx = f2h(info->descriptor_idx);
@@ -155,13 +157,31 @@ bytecode::field bytecode::parser::field() {
   return new_field;
 }
 
-void bytecode::parser::methods() {
-  uint16_t field_count = f2h(*read<uint16_t>());
-  object->methods.clear();
-  object->methods.reserve(field_count);
+bytecode::method bytecode::parser::method() {
+  auto *info = read<field_info_t>();
 
-  for (int i = 0; i < field_count; ++i) {
-    object->methods.push_back(field());
+  bytecode::method new_method(object.get());
+  new_method.access_flags = f2h(info->access_flags);
+  new_method.name_idx = f2h(info->name_idx);
+  new_method.descriptor_idx = f2h(info->descriptor_idx);
+
+  uint16_t attributes_count = f2h(info->attributes_count);
+  new_method.attributes.reserve(attributes_count);
+
+  for (int i = 0; i < attributes_count; ++i) {
+    new_method.attributes.push_back(attribute());
+  }
+
+  return new_method;
+}
+
+void bytecode::parser::methods() {
+  uint16_t method_count = f2h(*read<uint16_t>());
+  object->methods.clear();
+  object->methods.reserve(method_count);
+
+  for (int i = 0; i < method_count; ++i) {
+    object->methods.push_back(method());
   }
 }
 
